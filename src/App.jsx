@@ -7,25 +7,37 @@ import { parseSpikeCsv } from './utils/parseSpikeCsv'
 import './App.css'
 
 export default function App() {
+  const [rawCsv, setRawCsv] = useState(null)
+  const [isiThreshold, setIsiThreshold] = useState(0.1)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [source, setSource] = useState('local')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState(null)
-  const [source, setSource] = useState('local')
   const [historyKey, setHistoryKey] = useState(0)
 
-  const handleFile = (text, src = 'local') => {
+  const analyze = (text, isi) => {
     setError(null)
     setSaved(false)
     setSaveError(null)
-    setSource(src)
     try {
-      setResult(parseSpikeCsv(text))
+      setResult(parseSpikeCsv(text, isi))
     } catch (e) {
       setError(e.message)
       setResult(null)
     }
+  }
+
+  const handleFile = (text, src = 'local') => {
+    setRawCsv(text)
+    setSource(src)
+    analyze(text, isiThreshold)
+  }
+
+  const handleIsiChange = val => {
+    setIsiThreshold(val)
+    if (rawCsv) analyze(rawCsv, val)
   }
 
   const handleSave = async () => {
@@ -58,10 +70,26 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        <FileLoader
-          onFile={handleFile}
-          onError={msg => setError(msg)}
-        />
+        <FileLoader onFile={handleFile} onError={msg => setError(msg)} />
+
+        <div className="isi-bar">
+          <label className="isi-label" htmlFor="isi-input">
+            ISI threshold for burst detection
+          </label>
+          <div className="isi-controls">
+            <input
+              id="isi-input"
+              type="number"
+              className="isi-input"
+              value={isiThreshold}
+              min={0.001}
+              max={10}
+              step={0.01}
+              onChange={e => handleIsiChange(parseFloat(e.target.value) || 0.1)}
+            />
+            <span className="isi-unit">seconds</span>
+          </div>
+        </div>
 
         {error && <div className="alert alert-error">{error}</div>}
 

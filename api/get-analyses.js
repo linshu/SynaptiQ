@@ -3,24 +3,41 @@ import { sql } from '@vercel/postgres'
 async function ensureSchema() {
   await sql`
     CREATE TABLE IF NOT EXISTS recordings (
-      id           SERIAL PRIMARY KEY,
-      name         TEXT NOT NULL,
-      source       TEXT NOT NULL,
-      duration_s   FLOAT,
-      total_spikes INTEGER,
-      created_at   TIMESTAMPTZ DEFAULT NOW()
+      id            SERIAL PRIMARY KEY,
+      name          TEXT NOT NULL,
+      source        TEXT NOT NULL,
+      duration_s    FLOAT,
+      total_spikes  INTEGER,
+      isi_threshold FLOAT DEFAULT 0.1,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
     )
   `
+  await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS isi_threshold FLOAT DEFAULT 0.1`
+
   await sql`
     CREATE TABLE IF NOT EXISTS well_results (
-      id               SERIAL PRIMARY KEY,
-      recording_id     INTEGER REFERENCES recordings(id) ON DELETE CASCADE,
-      well_id          TEXT NOT NULL,
-      spike_count      INTEGER,
-      frequency_hz     FLOAT,
-      avg_amplitude_mv FLOAT
+      id                             SERIAL PRIMARY KEY,
+      recording_id                   INTEGER REFERENCES recordings(id) ON DELETE CASCADE,
+      well_id                        TEXT NOT NULL,
+      spike_count                    INTEGER,
+      frequency_hz                   FLOAT,
+      avg_amplitude_mv               FLOAT,
+      burst_count                    INTEGER,
+      burst_spike_count              INTEGER,
+      burst_frequency_hz             FLOAT,
+      burst_avg_amplitude_mv         FLOAT,
+      single_spike_count             INTEGER,
+      single_spike_frequency_hz      FLOAT,
+      single_spike_avg_amplitude_mv  FLOAT
     )
   `
+  await sql`ALTER TABLE well_results ADD COLUMN IF NOT EXISTS burst_count INTEGER`
+  await sql`ALTER TABLE well_results ADD COLUMN IF NOT EXISTS burst_spike_count INTEGER`
+  await sql`ALTER TABLE well_results ADD COLUMN IF NOT EXISTS burst_frequency_hz FLOAT`
+  await sql`ALTER TABLE well_results ADD COLUMN IF NOT EXISTS burst_avg_amplitude_mv FLOAT`
+  await sql`ALTER TABLE well_results ADD COLUMN IF NOT EXISTS single_spike_count INTEGER`
+  await sql`ALTER TABLE well_results ADD COLUMN IF NOT EXISTS single_spike_frequency_hz FLOAT`
+  await sql`ALTER TABLE well_results ADD COLUMN IF NOT EXISTS single_spike_avg_amplitude_mv FLOAT`
 }
 
 export default async function handler(req, res) {
@@ -30,8 +47,9 @@ export default async function handler(req, res) {
 
   try {
     await ensureSchema()
+
     const { rows: recordings } = await sql`
-      SELECT id, name, source, duration_s, total_spikes, created_at
+      SELECT id, name, source, duration_s, total_spikes, isi_threshold, created_at
       FROM recordings
       ORDER BY created_at DESC
       LIMIT 50
@@ -43,7 +61,11 @@ export default async function handler(req, res) {
 
     const ids = recordings.map(r => r.id)
     const { rows: wells } = await sql`
-      SELECT recording_id, well_id, spike_count, frequency_hz, avg_amplitude_mv
+      SELECT
+        recording_id, well_id,
+        spike_count, frequency_hz, avg_amplitude_mv,
+        burst_count, burst_spike_count, burst_frequency_hz, burst_avg_amplitude_mv,
+        single_spike_count, single_spike_frequency_hz, single_spike_avg_amplitude_mv
       FROM well_results
       WHERE recording_id = ANY(${ids})
       ORDER BY well_id

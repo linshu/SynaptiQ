@@ -1,64 +1,101 @@
 /**
  * Parses an Axion Biosystems AxIS Spike List CSV export.
  *
- * Returns: { recordingName, durationS, totalSpikes, wells }
- * where wells = [{ wellId, spikeCount, frequencyHz, avgAmplitudeMv }]
+ * Returns: { recordingName, durationS, totalSpikes, isiThreshold, wells }
+ * where wells = [{
+ *   wellId,
+ *   spikeCount, frequencyHz, avgAmplitudeMv,
+ *   burstCount, burstSpikeCount, burstFrequencyHz, burstAvgAmplitudeMv,
+ *   singleSpikeCount, singleSpikeFrequencyHz, singleSpikeAvgAmplitudeMv,
+ * }]
  */
-export function parseSpikeCsv(text) {
+export function parseSpikeCsv(text, isiThreshold = 0.1) {
   const lines = text.split(/\r?\n/)
   const metadata = {}
-  const spikes = []
+  const rawWells = new Map() // wellId → [{time, amplitude}]
 
   for (const line of lines) {
     const cols = line.split(',')
     if (cols.length < 5) continue
 
-    // Stop at Well Information footer
     if (cols[0]?.trim() === 'Well Information') break
 
     const timeStr = cols[2]?.trim()
     const electrode = cols[3]?.trim()
     const ampStr = cols[4]?.trim()
 
-    // Spike row: time in col[2], electrode label in col[3]
     if (/^\d+\.\d+$/.test(timeStr) && /^[A-Z]\d+_\d+$/.test(electrode)) {
-      spikes.push({
-        time: parseFloat(timeStr),
-        amplitude: parseFloat(ampStr),
-        wellId: electrode.substring(0, 2),
-      })
+      const wellId = electrode.substring(0, 2)
+      if (!rawWells.has(wellId)) rawWells.set(wellId, [])
+      rawWells.get(wellId).push({ time: parseFloat(timeStr), amplitude: parseFloat(ampStr) })
     } else {
-      // Metadata row
       const key = cols[0]?.trim()
       const val = cols[1]?.trim()
       if (key && val) metadata[key] = val
     }
   }
 
-  if (spikes.length === 0) {
+  if (rawWells.size === 0) {
     throw new Error('No spike data found. Make sure this is an Axion Spike List CSV export.')
   }
 
-  const durationS = spikes.reduce((max, s) => s.time > max ? s.time : max, 0)
-  const recordingName = metadata['Recording Name'] || 'Unknown Recording'
-
-  // Group spikes by well
-  const wellMap = new Map()
-  for (const spike of spikes) {
-    if (!wellMap.has(spike.wellId)) wellMap.set(spike.wellId, [])
-    wellMap.get(spike.wellId).push(spike)
+  let durationS = 0
+  for (const spikes of rawWells.values()) {
+    for (const s of spikes) {
+      if (s.time > durationS) durationS = s.time
+    }
   }
+
+  const recordingName = metadata['Recording Name'] || 'Unknown Recording'
+  let totalSpikes = 0
+  for (const spikes of rawWells.values()) totalSpikes += spikes.length
 
   const wells = []
-  for (const [wellId, wellSpikes] of wellMap) {
-    const spikeCount = wellSpikes.length
-    const frequencyHz = durationS > 0 ? spikeCount / durationS : 0
-    const avgAmplitudeMv =
-      wellSpikes.reduce((sum, s) => sum + s.amplitude, 0) / spikeCount
-    wells.push({ wellId, spikeCount, frequencyHz, avgAmplitudeMv })
+  for (const [wellId, spikes] of rawWells) {
+    wells.push(analyzeWell(wellId, spikes, durationS, isiThreshold))
   }
-
   wells.sort((a, b) => a.wellId.localeCompare(b.wellId))
 
-  return { recordingName, durationS, totalSpikes: spikes.length, wells }
+  return { recordingName, durationS, totalSpikes, isiThreshold, wells }
+}
+
+function analyzeWell(wellId, spikes, durationS, isiThreshold) {
+  spikes.sort((a, b) => a.time - b.time)
+
+  // Mark each spike as burst (true) or single (false)
+  const inBurst = new Array(spikes.length).fill(false)
+  for (let i = 0; i < spikes.length - 1; i++) {
+    if (spikes[i + 1].time - spikes[i].time < isiThreshold) {
+      inBurst[i] = true
+      inBurst[i + 1] = true
+    }
+  }
+
+  // Count distinct burst events
+  let burstCount = 0
+  let inRun = false
+  for (let i = 0; i < spikes.length; i++) {
+    if (inBurst[i] && !inRun) { burstCount++; inRun = true }
+    if (!inBurst[i]) inRun = false
+  }
+
+  const burstSpikes = spikes.filter((_, i) => inBurst[i])
+  const singleSpikes = spikes.filter((_, i) => !inBurst[i])
+
+  const mean = arr => arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0
+  const freq = n => durationS > 0 ? n / durationS : 0
+
+  return {
+    wellId,
+    spikeCount: spikes.length,
+    frequencyHz: freq(spikes.length),
+    avgAmplitudeMv: mean(spikes.map(s => s.amplitude)),
+    burstCount,
+    burstSpikeCount: burstSpikes.length,
+    burstFrequencyHz: freq(burstSpikes.length),
+    burstAvgAmplitudeMv: mean(burstSpikes.map(s => s.amplitude)),
+    singleSpikeCount: singleSpikes.length,
+    singleSpikeFrequencyHz: freq(singleSpikes.length),
+    singleSpikeAvgAmplitudeMv: mean(singleSpikes.map(s => s.amplitude)),
+  }
 }

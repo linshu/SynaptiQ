@@ -43,6 +43,7 @@ export default function HistoryList({ refreshKey }) {
                   {new Date(rec.created_at).toLocaleDateString()} &nbsp;·&nbsp;
                   {rec.total_spikes?.toLocaleString()} spikes &nbsp;·&nbsp;
                   {rec.duration_s?.toFixed(1)}s &nbsp;·&nbsp;
+                  ISI {rec.isi_threshold ?? 0.1}s &nbsp;·&nbsp;
                   {rec.source}
                 </span>
                 <span className="chevron">{expanded[rec.id] ? '▲' : '▼'}</span>
@@ -52,10 +53,15 @@ export default function HistoryList({ refreshKey }) {
                   <table className="results-table">
                     <thead>
                       <tr>
-                        <th>Well ID</th>
-                        <th>Spike Count</th>
-                        <th>Frequency (Hz)</th>
-                        <th>Avg Amplitude (mV)</th>
+                        <th rowSpan={2} className="th-well">Well</th>
+                        <th colSpan={3} className="th-group th-group-total">All Spikes</th>
+                        <th colSpan={4} className="th-group th-group-burst">Bursts</th>
+                        <th colSpan={3} className="th-group th-group-single">Single Spikes</th>
+                      </tr>
+                      <tr>
+                        <th>Count</th><th>Freq (Hz)</th><th>Avg Amp (mV)</th>
+                        <th>Bursts</th><th>Spikes</th><th>Freq (Hz)</th><th>Avg Amp (mV)</th>
+                        <th>Count</th><th>Freq (Hz)</th><th>Avg Amp (mV)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -65,6 +71,13 @@ export default function HistoryList({ refreshKey }) {
                           <td>{w.spike_count?.toLocaleString()}</td>
                           <td>{w.frequency_hz?.toFixed(4)}</td>
                           <td>{w.avg_amplitude_mv?.toFixed(4)}</td>
+                          <td className="burst-cell">{w.burst_count ?? '—'}</td>
+                          <td className="burst-cell">{w.burst_spike_count?.toLocaleString() ?? '—'}</td>
+                          <td className="burst-cell">{w.burst_frequency_hz?.toFixed(4) ?? '—'}</td>
+                          <td className="burst-cell">{w.burst_avg_amplitude_mv?.toFixed(4) ?? '—'}</td>
+                          <td className="single-cell">{w.single_spike_count?.toLocaleString() ?? '—'}</td>
+                          <td className="single-cell">{w.single_spike_frequency_hz?.toFixed(4) ?? '—'}</td>
+                          <td className="single-cell">{w.single_spike_avg_amplitude_mv?.toFixed(4) ?? '—'}</td>
                         </tr>
                       ))}
                     </tbody>
