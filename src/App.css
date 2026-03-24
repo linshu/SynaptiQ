@@ -201,6 +201,34 @@
   color: var(--text);
 }
 
+/* ── Save name bar ───────────────────────────────────────────────────────── */
+.save-name-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+}
+
+.name-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 7px 10px;
+  font: 14px var(--sans);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+
+  &:focus {
+    outline: 2px solid var(--accent-border);
+    outline-offset: 1px;
+  }
+}
+
 /* ── Results ─────────────────────────────────────────────────────────────── */
 .results-section {
   display: flex;

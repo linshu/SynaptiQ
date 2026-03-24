@@ -16,6 +16,7 @@ export default function App() {
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [historyKey, setHistoryKey] = useState(0)
+  const [analysisName, setAnalysisName] = useState(null) // null = not prompting
 
   const analyze = (text, isi) => {
     setError(null)
@@ -40,7 +41,12 @@ export default function App() {
     if (rawCsv) analyze(rawCsv, val)
   }
 
-  const handleSave = async () => {
+  const handleSaveClick = () => {
+    setAnalysisName(result.recordingName)
+    setSaveError(null)
+  }
+
+  const handleSaveConfirm = async () => {
     if (!result || saving) return
     setSaving(true)
     setSaveError(null)
@@ -48,10 +54,11 @@ export default function App() {
       const res = await fetch('/api/save-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...result, source }),
+        body: JSON.stringify({ ...result, recordingName: analysisName, source }),
       })
       if (!res.ok) throw new Error(await res.text())
       setSaved(true)
+      setAnalysisName(null)
       setHistoryKey(k => k + 1)
     } catch (e) {
       setSaveError('Save failed: ' + e.message)
@@ -118,14 +125,44 @@ export default function App() {
 
             <div className="action-bar">
               <DownloadButton wells={result.wells} recordingName={result.recordingName} />
-              <button
-                className="btn btn-primary"
-                onClick={handleSave}
-                disabled={saving || saved}
-              >
-                {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save to History'}
-              </button>
+              {!saved && analysisName === null && (
+                <button className="btn btn-primary" onClick={handleSaveClick}>
+                  Save to History
+                </button>
+              )}
+              {saved && (
+                <button className="btn btn-primary" disabled>✓ Saved</button>
+              )}
             </div>
+
+            {analysisName !== null && !saved && (
+              <div className="save-name-bar">
+                <label className="isi-label" htmlFor="analysis-name">Analysis name</label>
+                <input
+                  id="analysis-name"
+                  className="name-input"
+                  type="text"
+                  value={analysisName}
+                  onChange={e => setAnalysisName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveConfirm()}
+                  autoFocus
+                />
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSaveConfirm}
+                  disabled={saving || !analysisName.trim()}
+                >
+                  {saving ? 'Saving…' : 'Confirm'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setAnalysisName(null)}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
 
             {saveError && <div className="alert alert-error">{saveError}</div>}
           </section>
